@@ -3,6 +3,9 @@
   import type { RouteParams } from "./$types";
 
   $: pageParams = $page.params as RouteParams;
+  
+  //request the data from the server using the id
+
 </script>
 
 {#if pageParams.id == undefined}
