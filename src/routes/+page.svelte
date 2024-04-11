@@ -3,8 +3,15 @@
 
   import { base } from "$app/paths";
 
-  let id = "";
-  $: href = `${base}/gen/${id}`;
+  //todo:
+  // 1. summariser is not sending anything, check the plot points structure. is gen text being added
+  // 2. close button does not close
+
+  let showStoryGen = false;
+
+  function toggleStoryGen() {
+    showStoryGen = !showStoryGen;
+  }
 
   function removeNonValidCharacters(inputString) {
     // Define a regular expression to match non-valid characters
@@ -12,6 +19,14 @@
 
     // Replace non-valid characters with an empty string
     return inputString.replace(nonValidRegex, "");
+  }
+
+  function resetForm(event) {
+    event.preventDefault();
+    document.getElementById("premise").value = "";
+    for (let i = 1; i <= 9; i++) {
+      document.getElementById(`input_${i}`).value = "";
+    }
   }
 
   async function callApi(payload) {
@@ -58,7 +73,10 @@
           try {
             result = JSON.parse(result);
             if (domElement) {
-              domElement.value = result["text"][0]
+              if (domElement.tagName === "TEXTAREA")
+                domElement.value = result["text"][0].trim();
+              else if (domElement.tagName === "P")
+                domElement.innerText = result["text"][0].trim();
             }
           } catch (error) {
             // Handle the error later
@@ -93,18 +111,18 @@
     constructor(debug = false) {
       this.structureTemplate = `## Story Structure
 Setup
-1.1 Exposition. The status quo or ‘ordinary world’ is established.
+1.1 Exposition. The status quo or "ordinary world" is established.
 1.2 Inciting Incident. An event that sets the story in motion.
-1.3 Plot Point A. The protagonist decides to tackle the challenge head-on. They ‘cross the threshold,’ and the story is now truly moving.
+1.3 Plot Point A. The protagonist decides to tackle the challenge head-on. They "cross the threshold" and the story is now truly moving.
 
 Confrontation
-2.1 Rising Action. The story's true stakes become clear; our hero grows familiar with their ‘new world’ and has their first encounters with some enemies and allies.
-2.2 Midpoint. An event that upends the protagonist’s mission.
+2.1 Rising Action. The story's true stakes become clear; our hero grows familiar with their "new world" and has their first encounters with some enemies and allies.
+2.2 Midpoint. An event that upends the protagonist's mission.
 2.3 Plot Point B. In the wake of the disorienting midpoint, the protagonist is tested — and fails. Their ability to succeed is now in doubt.
 
 Resolution
 3.1 Pre Climax. The night is darkest before dawn. The protagonist must pull themselves together and choose between decisive action and failure.
-3.2 Climax. They faces off against her antagonist one last time. Will they prevail?
+3.2 Climax. They face off against their antagonist one last time. Will they prevail?
 3.3 Denouement. All loose ends are tied up. The reader discovers the consequences of the climax. A new status quo is established.
 `;
       this.PLOT_POINTS_AMT = 9;
@@ -128,7 +146,7 @@ Resolution
       this.debug = debug;
     }
 
-    ingestPlotPointsPremiseFromForm() {
+    extractFromForm() {
       // Get the plot points from the form
       let plotPoints = {};
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
@@ -144,6 +162,7 @@ Resolution
       }
       this.plotPoints = plotPoints;
       this.premise = document.getElementById("premise").value;
+      this.genre = document.getElementById("genre").value;
     }
 
     plotPointsToPrompt() {
@@ -181,25 +200,19 @@ Resolution
       return prompt;
     }
 
-    constructDraftPrompt(plotPointIdx) {
+    async constructDraftPrompt(plotPointIdx) {
       const pp = this.PLOT_POINTS_NUMBERING.map(([ppIdx, _]) => ppIdx);
       const ppTrueIndex = pp.indexOf(plotPointIdx);
       const prev = ppTrueIndex > 0;
       const next = ppTrueIndex < pp.length - 1;
+      let prevText = "";
 
-      const prevText = prev
-        ? "\nHere is the previous plot summary:\n" +
-          this.plotPoints[pp[ppTrueIndex - 1]].get(
-            "summary",
-            this.summarisePlotPoint(pp[ppTrueIndex - 1]),
-          ) +
-          "\n"
-        : "";
-      const nextText = next
-        ? "\nIn the upcoming plot point:\n" +
-          this.plotPoints[pp[ppTrueIndex + 1]].get("description") +
-          "\n"
-        : "";
+      if (prev) {
+        prevText =
+          this.plotPoints[pp[ppTrueIndex - 1]]["summary"] ??
+          await this.summarisePlotPoint(pp[ppTrueIndex - 1]);
+        prevText = "\nHere is the previous plot summary:\n" + prevText + "\n";
+      }
 
       let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.genre}. ${prevText}
 Using the provided summary for the previous plot point and the overall plot summary, write a narrative section for the current plot point. Be creative, explore interesting characters and unusual settings. Do NOT use foreshadowing and ensure that the narrative section ONLY relates to the current prompt. Do not incorporate future plot points.
@@ -209,7 +222,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       return prompt;
     }
 
-    summarisePlotPoint(plotPointIdx) {
+    async summarisePlotPoint(plotPointIdx) {
       const samplingParams = {
         max_tokens: 4096,
         temperature: 0.3,
@@ -223,17 +236,19 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to summarise the following narrative section into a few sentences. Here is the plot: ${text}[/INST]`;
       let summary = "";
       try {
-        const output = callApi({
+        const output = await callApi({
           prompt: prompt,
           stream: false,
           sampling_params: samplingParams,
         });
-        this.plotPoints[plotPointIdx]["summary"] = output;
         summary = output;
       } catch (error) {
         summary = this.plotPoints[plotPointIdx]["description"];
       }
 
+      this.plotPoints[plotPointIdx]["summary"] = summary;
+    
+      console.log(this.plotPoints)
       if (this.debug) {
         console.log(
           `Summarised plot point ${plotPointIdx} as\n-----------------------------\n${summary}`,
@@ -248,7 +263,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
     }
 
     async generatePlotPoints() {
-      this.ingestPlotPointsPremiseFromForm();
+      this.extractFromForm();
       const samplingParams = {
         max_tokens: 4096,
         temperature: 0.6,
@@ -280,20 +295,77 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
         };
 
         await callApi(payload).catch((error) => console.error(error));
-        this.ingestPlotPointsPremiseFromForm();
+        this.extractFromForm();
       }
 
       if (this.debug) {
         console.log(`Generated plot points: ${this.plotPointsToPrompt()}`);
       }
     }
+
+    async generateStory() {
+
+
+      const samplingParams = {
+        max_tokens: 4096,
+        temperature: 0.8,
+        repetition_penalty: 1.15,
+        top_p: 1,
+        min_p: 0.1,
+      };
+
+      let storyDiv = document.getElementById("story");
+      storyDiv.innerHTML = `<div id="buttonContainer">
+        <button class="close">Close</button>
+        <button class="download">Download</button>`
+
+      for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
+        if (!toggleStoryGen) {
+          break;
+        }
+
+        const plotPointIdx = this.PLOT_POINTS_NUMBERING[i][0];
+        const draftPrompt = await this.constructDraftPrompt(plotPointIdx);
+        this.plotPoints[plotPointIdx]["draft_prompt"] = draftPrompt;
+
+        // Create a p element for the generated section
+        let generatedPlotPoint = document.createElement("p");
+        generatedPlotPoint.classList.add("generated-section");
+        generatedPlotPoint.id = `generated-section-${i + 1}`;
+
+        storyDiv.appendChild(generatedPlotPoint);
+
+        // Call the API
+        let payload = {
+          prompt: draftPrompt,
+          stream: true,
+          sampling_params: samplingParams,
+          domElement: generatedPlotPoint,
+          genre: this.genre,
+        };
+        await callApi(payload).catch((error) => console.error(error));
+
+        if (this.debug) {
+          console.log(`Generated plot point ${plotPointIdx}`);
+        }
+
+        // Scroll to the generated section
+        generatedPlotPoint.scrollIntoView({ behavior: "smooth" });
+
+        // Add a line break after each generated section
+        storyDiv.appendChild(document.createElement("br"));
+      }
+    }
   }
 
-  function plotPointsSubmit(event) {
+  function generateStoryButton(event) {
     event.preventDefault();
-    storyGenerator.generatePlotPoints();
+    storyGenerator
+      .generatePlotPoints()
+      .then(() => toggleStoryGen())
+      .then(() => storyGenerator.generateStory())
+      .catch((error) => console.error(error));
   }
-
   let storyGenerator = new StoryGenerator(true);
 </script>
 
@@ -302,95 +374,227 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 </head>
 <body>
   <h1>Story Structure Input</h1>
-  <form on:submit={plotPointsSubmit}>
-    <h2>Premise</h2>
-    <p>
-      <label for="premise">Premise: A brief summary of the story. </label><br />
-      <input type="text" id="premise" name="premise" /><br />
-    </p>
-    <h2>Setup</h2>
-    <p>
-      <label for="exposition"
-        >1.1 Exposition: The status quo or ‘ordinary world’ is established.
-      </label><br />
-      <input type="text" id="input_1" name="input_1" , class="" /><br />
-    </p>
-    <p>
-      <label for="incitingIncident"
-        >1.2 Inciting Incident: An event that sets the story in motion.
-      </label><br />
-      <input type="text" id="input_2" name="input_2" /><br />
-    </p>
-    <p>
-      <label for="plotPointA"
-        >1.3 Plot Point A: The protagonist decides to tackle the challenge
-        head-on. They ‘cross the threshold,’ and the story is now truly moving.
-      </label><br />
-      <input type="text" id="input_3" name="input_3" /><br />
-    </p>
+  <div class="container">
+    <form on:submit={generateStoryButton} on:reset={resetForm}>
+      <!-- Premise -->
+      <div class="box">
+        <h2>Premise</h2>
+        <div class="group">
+          <p>
+            <label for="premise"
+              >Premise: A brief summary of the story.
+            </label><br />
+            <textarea id="premise" name="premise"></textarea><br />
+          </p>
+          <p>
+            <label for="genre">Genre: The genre of the story. </label><br />
+            <select name="genre" id="genre">
+              <option value="science_fiction"> Science Fiction </option>
+              <option value="love_stoires"> Love Stories </option>
+              <option value="ghost_stories"> Ghost Stories </option>
+            </select>
+          </p>
+        </div>
+      </div>
 
-    <h2>Confrontation</h2>
-    <p>
-      <label for="risingAction"
-        >2.1 Rising Action: The story's true stakes become clear; our hero grows
-        familiar with their ‘new world’ and has their first encounters with some
-        enemies and allies.
-      </label><br />
-      <input type="text" id="input_4" name="input_4" /><br />
-    </p>
-    <p>
-      <label for="midpoint"
-        >2.2 Midpoint: An event that upends the protagonist’s mission.
-      </label><br />
-      <input type="text" id="input_5" name="input_5" /><br />
-    </p>
-    <p>
-      <label for="plotPointB"
-        >2.3 Plot Point B: In the wake of the disorienting midpoint, the
-        protagonist is tested — and fails. Their ability to succeed is now in
-        doubt.
-      </label><br />
-      <input type="text" id="input_6" name="input_6" /><br />
-    </p>
+      <!-- Setup -->
+      <div class="box">
+        <h2>Setup</h2>
+        <div class="group">
+          <p>
+            <label for="exposition"
+              >1.1 Exposition: The status quo or ‘ordinary world’ is
+              established.</label
+            ><br />
+            <textarea id="input_1" name="input_1"></textarea><br />
+          </p>
+          <p>
+            <label for="incitingIncident"
+              >1.2 Inciting Incident: An event that sets the story in motion.</label
+            ><br />
+            <textarea id="input_2" name="input_2"></textarea><br />
+          </p>
+          <p>
+            <label for="plotPointA"
+              >1.3 Plot Point A: The protagonist decides to tackle the challenge
+              head-on. They ‘cross the threshold,’ and the story is now truly
+              moving.</label
+            ><br />
+            <textarea id="input_3" name="input_3"></textarea><br />
+          </p>
+        </div>
+      </div>
 
-    <h2>Resolution</h2>
-    <p>
-      <label for="preClimax"
-        >3.1 Pre Climax: The night is darkest before dawn. The protagonist must
-        pull themselves together and choose between decisive action and failure.
-      </label><br />
-      <input type="text" id="input_7" name="input_7" /><br />
-    </p>
-    <p>
-      <label for="climax"
-        >3.2 Climax: They faces off against her antagonist one last time. Will
-        they prevail?
-      </label><br />
-      <input type="text" id="input_8" name="input_8" /><br />
-    </p>
-    <p>
-      <label for="denouement"
-        >3.3 Denouement: All loose ends are tied up. The reader discovers the
-        consequences of the climax. A new status quo is established.
-      </label><br />
-      <input type="text" id="input_9" name="input_9" /><br />
-    </p>
-    <button type="submit">Submit</button>
-  </form>
+      <!-- Confrontation -->
+      <div class="box">
+        <h2>Confrontation</h2>
+        <div class="group">
+          <p>
+            <label for="risingAction"
+              >2.1 Rising Action: The story's true stakes become clear; our hero
+              grows familiar with their ‘new world’ and has their first
+              encounters with some enemies and allies.</label
+            ><br />
+            <textarea id="input_4" name="input_4"></textarea><br />
+          </p>
+          <p>
+            <label for="midpoint"
+              >2.2 Midpoint: An event that upends the protagonist’s mission.</label
+            ><br />
+            <textarea id="input_5" name="input_5"></textarea><br />
+          </p>
+          <p>
+            <label for="plotPointB"
+              >2.3 Plot Point B: In the wake of the disorienting midpoint, the
+              protagonist is tested — and fails. Their ability to succeed is now
+              in doubt.</label
+            ><br />
+            <textarea id="input_6" name="input_6"></textarea><br />
+          </p>
+        </div>
+      </div>
+
+      <!-- Resolution -->
+      <div class="box">
+        <h2>Resolution</h2>
+        <div class="group">
+          <p>
+            <label for="preClimax"
+              >3.1 Pre Climax: The night is darkest before dawn. The protagonist
+              must pull themselves together and choose between decisive action
+              and failure.</label
+            ><br />
+            <textarea id="input_7" name="input_7"></textarea><br />
+          </p>
+          <p>
+            <label for="climax"
+              >3.2 Climax: They face off against their antagonist one last time.
+              Will they prevail?</label
+            ><br />
+            <textarea id="input_8" name="input_8"></textarea><br />
+          </p>
+          <p>
+            <label for="denouement"
+              >3.3 Denouement: All loose ends are tied up. The reader discovers
+              the consequences of the climax. A new status quo is established.</label
+            ><br />
+            <textarea id="input_9" name="input_9"></textarea><br />
+          </p>
+        </div>
+      </div>
+
+      <button type="submit">Generate Story!</button>
+      <button type="reset">Reset</button>
+    </form>
+    {#if showStoryGen}
+    <div id="story">
+      <div id="buttonContainer">
+        <button class="close" on:click={toggleStoryGen}>Close</button>
+        <button class="download">Download</button>
+      </div>
+    </div>
+    {/if}
+  </div>
 </body>
 
-<!-- <p>
-  Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation
-</p>
-
-<input type="text" bind:value={id} placeholder="Choose an ID to go to." />
-
-<p>Visit <a {href}>this dynamic route ({href})</a></p> -->
-
 <style>
-  /* make the input boxes large */
-  input {
-    width: 100%;
-    height: 100px;
+  body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
   }
+
+  .container {
+    max-width: 75%;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .group p {
+    width: calc(33.33% - 10px);
+    margin-bottom: 40px;
+    position: relative;
+  }
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 100px;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    position: relative;
+  }
+
+  /* Adjust the button alignment */
+  button {
+    background-color: #007bff;
+    color: white;
+    font-size: 16px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 20px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Adjust the heading margin */
+  h2 {
+    margin-top: 0;
+  }
+
+  button:hover {
+    background-color: #0056b3;
+  }
+
+  button[type="reset"] {
+    background-color: #dc3545;
+    margin-right: 10px;
+  }
+
+  button[type="reset"]:hover {
+    background-color: #bd2130;
+  }
+
+  #story {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 80%;
+    background-color: white;
+    border: 2px solid black;
+    padding: 20px;
+    overflow-y: auto; /* Enable vertical scrollbar if content exceeds the height */
+    z-index: 9999; /* Ensure the div appears on top of other content */
+  }
+  /* button container fixed top right of parent */
+  #buttonContainer {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+  .close {
+    cursor: pointer;
+  }
+
+  .download {
+    cursor: pointer;
+  }
+
 </style>
+
+
