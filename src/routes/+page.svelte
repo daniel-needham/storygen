@@ -6,12 +6,28 @@
   //todo:
   // 1. summariser is not sending anything, check the plot points structure. is gen text being added
   // 2. close button does not close
+  // 3. handle errors
 
   let showStoryGen = false;
+  let story = "";
+
+  function updateStory(str) {
+    story = str
+  }
 
   function toggleStoryGen() {
-    showStoryGen = !showStoryGen;
+    if (showStoryGen) {
+      showStoryGen = false;
+      document.getElementById("story").classList.add("hide");
+      document.getElementById("story").classList.remove("show");
+    } else {
+      showStoryGen = true;
+      document.getElementById("story").classList.add("show");
+      document.getElementById("story").classList.remove("hide");
+    }
   }
+
+  
 
   function removeNonValidCharacters(inputString) {
     // Define a regular expression to match non-valid characters
@@ -84,10 +100,11 @@
           if (isDone) {
             done = true;
             console.log("Streaming response:", result);
+            return result.text[0].trim(); // Return the response text
           }
         }
       } else {
-        console.log("Error:", response.status, response.statusText);
+        throw new Error("Error:", response.status, response.statusText);
       }
     } else {
       // Make a POST request to the API endpoint
@@ -315,9 +332,6 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       };
 
       let storyDiv = document.getElementById("story");
-      storyDiv.innerHTML = `<div id="buttonContainer">
-        <button class="close">Close</button>
-        <button class="download">Download</button>`
 
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
         if (!toggleStoryGen) {
@@ -343,7 +357,9 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
           domElement: generatedPlotPoint,
           genre: this.genre,
         };
-        await callApi(payload).catch((error) => console.error(error));
+        let generatedSection = await callApi(payload).catch((error) => console.error(error));
+
+        this.plotPoints[plotPointIdx]["text"] = generatedSection;
 
         if (this.debug) {
           console.log(`Generated plot point ${plotPointIdx}`);
@@ -486,14 +502,13 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       <button type="submit">Generate Story!</button>
       <button type="reset">Reset</button>
     </form>
-    {#if showStoryGen}
-    <div id="story">
+    <div id="story" class="hide">
       <div id="buttonContainer">
-        <button class="close" on:click={toggleStoryGen}>Close</button>
-        <button class="download">Download</button>
+        <button type="button" id="close" on:click={toggleStoryGen}>Close</button>
+        <button type="button" id="download">Download</button>
+        <p>{story}</p>
       </div>
     </div>
-    {/if}
   </div>
 </body>
 
@@ -586,15 +601,16 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     position: absolute;
     top: 0;
     right: 0;
-  }
-  .close {
-    cursor: pointer;
+
   }
 
-  .download {
-    cursor: pointer;
-  }
+  .show {
+  display: block;
+}
 
+  .hide {
+  display: none;
+}
 </style>
 
 
