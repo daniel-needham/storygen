@@ -5,19 +5,63 @@
 
   //todo:
   // 1. summariser is not sending anything, check the plot points structure. is gen text being added
-  // 2. close button does not close
+  // 2. close button does not close DONE
   // 3. handle errors
+  // 4. change streaming for plot points to svelte way
+
+  import { onMount, afterUpdate } from "svelte";
+
+  let scrollDiv;
+
+  onMount(() => {
+    scrollToBottom();
+  });
+
+  afterUpdate(() => {
+    scrollToBottom();
+  });
+
+  function scrollToBottom() {
+    if (scrollDiv) {
+      scrollDiv.scrollTop = scrollDiv.scrollHeight;
+    }
+  }
+
+  let domPlotPoints = {
+    "1": "",
+    "2": "",
+    "3": "",
+    "4": "",
+    "5": "",
+    "6": "",
+    "7": "",
+    "8": "",
+    "9": "",
+  };
 
   let showStoryGen = false;
-  let story = "";
+  let domStory = [];
+
+  function addStorySection() {
+    domStory.push("");
+  }
 
   function updateStory(str) {
-    story = str
+    // get last element of story array
+    let lastElement = domStory[domStory.length - 1];
+    // append the new string to the last element
+    domStory[domStory.length - 1] = str;
+  }
+
+  function updatePlotPoint(str, index) {
+    domPlotPoints[index.toString()] = str;
   }
 
   function toggleStoryGen() {
     if (showStoryGen) {
       showStoryGen = false;
+      domStory = [];
+      storyGenerator.clearStory();
       document.getElementById("story").classList.add("hide");
       document.getElementById("story").classList.remove("show");
     } else {
@@ -26,8 +70,6 @@
       document.getElementById("story").classList.remove("hide");
     }
   }
-
-  
 
   function removeNonValidCharacters(inputString) {
     // Define a regular expression to match non-valid characters
@@ -58,11 +100,11 @@
     };
 
     const stream = payload.stream || false;
-    let domElement = null;
+    let index = null;
 
-    if (payload.domElement) {
-      domElement = payload.domElement;
-      delete payload.domElement;
+    if (payload.index) {
+      index = payload.index;
+      delete payload.index;
     }
 
     if (stream) {
@@ -84,23 +126,21 @@
         let result = "";
         while (!done) {
           const { value, done: isDone } = await reader.read();
-          result = new TextDecoder("utf-8").decode(value);
-          result = removeNonValidCharacters(result);
+          let temp_result = new TextDecoder("utf-8").decode(value);
+          temp_result = removeNonValidCharacters(temp_result);
           try {
-            result = JSON.parse(result);
-            if (domElement) {
-              if (domElement.tagName === "TEXTAREA")
-                domElement.value = result["text"][0].trim();
-              else if (domElement.tagName === "P")
-                domElement.innerText = result["text"][0].trim();
+            result = JSON.parse(temp_result);
+            if (index) {
+              updatePlotPoint(result.text[0].trim(), index);
+            } else {
+              updateStory(result.text[0].trim());
             }
           } catch (error) {
             // Handle the error later
+            console.error(error);
           }
           if (isDone) {
             done = true;
-            console.log("Streaming response:", result);
-            return result.text[0].trim(); // Return the response text
           }
         }
       } else {
@@ -163,13 +203,19 @@ Resolution
       this.debug = debug;
     }
 
+    getPromptReadyGenre() {
+      if (this.genre) {
+        return this.genre.replace("_", " ");
+      } else {
+        return "science fiction";
+      }
+    }
+
     extractFromForm() {
       // Get the plot points from the form
       let plotPoints = {};
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
-        const inputElement = document.getElementById(`input_${i + 1}`);
-        // get the input value if it exists
-        let inputValue = inputElement.value;
+        const inputValue = domPlotPoints[i + 1];
         if (inputValue === "") {
           continue;
         }
@@ -227,11 +273,11 @@ Resolution
       if (prev) {
         prevText =
           this.plotPoints[pp[ppTrueIndex - 1]]["summary"] ??
-          await this.summarisePlotPoint(pp[ppTrueIndex - 1]);
+          (await this.summarisePlotPoint(pp[ppTrueIndex - 1]));
         prevText = "\nHere is the previous plot summary:\n" + prevText + "\n";
       }
 
-      let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.genre}. ${prevText}
+      let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.getPromptReadyGenre()}. ${prevText}
 Using the provided summary for the previous plot point and the overall plot summary, write a narrative section for the current plot point. Be creative, explore interesting characters and unusual settings. Do NOT use foreshadowing and ensure that the narrative section ONLY relates to the current prompt. Do not incorporate future plot points.
 Here is the current plot prompt:
 ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
@@ -264,8 +310,8 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       }
 
       this.plotPoints[plotPointIdx]["summary"] = summary;
-    
-      console.log(this.plotPoints)
+
+      console.log(this.plotPoints);
       if (this.debug) {
         console.log(
           `Summarised plot point ${plotPointIdx} as\n-----------------------------\n${summary}`,
@@ -277,6 +323,18 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
 
     getPromptReadyPremise() {
       return "Premise: " + this.premise;
+    }
+
+    addLastStorySectionToPlotPoints(ind) {
+      this.plotPoints[ind]["text"] = domStory[domStory.length - 1];
+    }
+
+    clearStory() {
+      for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
+        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["text"] = "";
+        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["summary"] = "";
+        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["draft_prompt"] = "";
+      }
     }
 
     async generatePlotPoints() {
@@ -298,9 +356,8 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
           continue;
         }
 
-        const inputElement = document.getElementById(`input_${i + 1}`);
         const currentPlotPrompt = this.plotPointsToPrompt();
-        let plotPointPrompt = `[INST]You are a renowned writer specialising in the genre of ${this.genre}. You are able to create engaging narratives following a three act structure. Using the Story Structure guide, fill the Story Events suitable for the story as outlined in the premise.
+        let plotPointPrompt = `[INST]You are a renowned writer specialising in the genre of ${this.getPromptReadyGenre()}. You are able to create engaging narratives following a three act structure. Using the Story Structure guide, fill the Story Events suitable for the story as outlined in the premise.
 ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCreate a single event for the plot point ${plotPointIdx}, keep it concise and avoid repeating previous plot points.[/INST] ${plotPointIdx} ${plotPointDesc}:`;
 
         // Call the API
@@ -308,7 +365,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
           prompt: plotPointPrompt,
           stream: true,
           sampling_params: samplingParams,
-          domElement: inputElement,
+          index: i + 1,
         };
 
         await callApi(payload).catch((error) => console.error(error));
@@ -321,8 +378,6 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     }
 
     async generateStory() {
-
-
       const samplingParams = {
         max_tokens: 4096,
         temperature: 0.8,
@@ -330,8 +385,6 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
         top_p: 1,
         min_p: 0.1,
       };
-
-      let storyDiv = document.getElementById("story");
 
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
         if (!toggleStoryGen) {
@@ -342,34 +395,28 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
         const draftPrompt = await this.constructDraftPrompt(plotPointIdx);
         this.plotPoints[plotPointIdx]["draft_prompt"] = draftPrompt;
 
-        // Create a p element for the generated section
-        let generatedPlotPoint = document.createElement("p");
-        generatedPlotPoint.classList.add("generated-section");
-        generatedPlotPoint.id = `generated-section-${i + 1}`;
-
-        storyDiv.appendChild(generatedPlotPoint);
+        addStorySection();
 
         // Call the API
         let payload = {
           prompt: draftPrompt,
           stream: true,
           sampling_params: samplingParams,
-          domElement: generatedPlotPoint,
-          genre: this.genre,
+          lora: this.genre,
         };
-        let generatedSection = await callApi(payload).catch((error) => console.error(error));
 
-        this.plotPoints[plotPointIdx]["text"] = generatedSection;
+        if (this.debug) {
+          console.log(`Payload for plot point ${plotPointIdx}:`);
+          console.log(payload);
+        }
+
+        await callApi(payload).catch((error) => console.error(error));
+
+        this.addLastStorySectionToPlotPoints(plotPointIdx);
 
         if (this.debug) {
           console.log(`Generated plot point ${plotPointIdx}`);
         }
-
-        // Scroll to the generated section
-        generatedPlotPoint.scrollIntoView({ behavior: "smooth" });
-
-        // Add a line break after each generated section
-        storyDiv.appendChild(document.createElement("br"));
       }
     }
   }
@@ -422,13 +469,21 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
               >1.1 Exposition: The status quo or ‘ordinary world’ is
               established.</label
             ><br />
-            <textarea id="input_1" name="input_1"></textarea><br />
+            <textarea
+              id="input_1"
+              name="input_1"
+              bind:value={domPlotPoints["1"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="incitingIncident"
               >1.2 Inciting Incident: An event that sets the story in motion.</label
             ><br />
-            <textarea id="input_2" name="input_2"></textarea><br />
+            <textarea
+              id="input_2"
+              name="input_2"
+              bind:value={domPlotPoints["2"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="plotPointA"
@@ -436,7 +491,11 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
               head-on. They ‘cross the threshold,’ and the story is now truly
               moving.</label
             ><br />
-            <textarea id="input_3" name="input_3"></textarea><br />
+            <textarea
+              id="input_3"
+              name="input_3"
+              bind:value={domPlotPoints["3"]}
+            ></textarea><br />
           </p>
         </div>
       </div>
@@ -451,13 +510,21 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
               grows familiar with their ‘new world’ and has their first
               encounters with some enemies and allies.</label
             ><br />
-            <textarea id="input_4" name="input_4"></textarea><br />
+            <textarea
+              id="input_4"
+              name="input_4"
+              bind:value={domPlotPoints["4"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="midpoint"
               >2.2 Midpoint: An event that upends the protagonist’s mission.</label
             ><br />
-            <textarea id="input_5" name="input_5"></textarea><br />
+            <textarea
+              id="input_5"
+              name="input_5"
+              bind:value={domPlotPoints["5"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="plotPointB"
@@ -465,7 +532,11 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
               protagonist is tested — and fails. Their ability to succeed is now
               in doubt.</label
             ><br />
-            <textarea id="input_6" name="input_6"></textarea><br />
+            <textarea
+              id="input_6"
+              name="input_6"
+              bind:value={domPlotPoints["6"]}
+            ></textarea><br />
           </p>
         </div>
       </div>
@@ -480,21 +551,33 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
               must pull themselves together and choose between decisive action
               and failure.</label
             ><br />
-            <textarea id="input_7" name="input_7"></textarea><br />
+            <textarea
+              id="input_7"
+              name="input_7"
+              bind:value={domPlotPoints["7"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="climax"
               >3.2 Climax: They face off against their antagonist one last time.
               Will they prevail?</label
             ><br />
-            <textarea id="input_8" name="input_8"></textarea><br />
+            <textarea
+              id="input_8"
+              name="input_8"
+              bind:value={domPlotPoints["8"]}
+            ></textarea><br />
           </p>
           <p>
             <label for="denouement"
               >3.3 Denouement: All loose ends are tied up. The reader discovers
               the consequences of the climax. A new status quo is established.</label
             ><br />
-            <textarea id="input_9" name="input_9"></textarea><br />
+            <textarea
+              id="input_9"
+              name="input_9"
+              bind:value={domPlotPoints["9"]}
+            ></textarea><br />
           </p>
         </div>
       </div>
@@ -504,9 +587,14 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     </form>
     <div id="story" class="hide">
       <div id="buttonContainer">
-        <button type="button" id="close" on:click={toggleStoryGen}>Close</button>
+        <button type="button" id="close" on:click={toggleStoryGen}>Close</button
+        >
         <button type="button" id="download">Download</button>
-        <p>{story}</p>
+      </div>
+      <div bind:this={scrollDiv} id="scrollDiv">
+        {#each domStory as section}
+          <p>{@html section}</p>
+        {/each}
       </div>
     </div>
   </div>
@@ -596,21 +684,28 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     overflow-y: auto; /* Enable vertical scrollbar if content exceeds the height */
     z-index: 9999; /* Ensure the div appears on top of other content */
   }
+
+  #scrollDiv {
+    height: 100%;
+    width: 100%;
+    overflow-y: auto;
+  }
+
+  #story p {
+    white-space: pre-line;
+  }
   /* button container fixed top right of parent */
   #buttonContainer {
     position: absolute;
     top: 0;
     right: 0;
-
   }
 
   .show {
-  display: block;
-}
+    display: block;
+  }
 
   .hide {
-  display: none;
-}
+    display: none;
+  }
 </style>
-
-
