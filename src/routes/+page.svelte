@@ -4,10 +4,10 @@
   import { base } from "$app/paths";
 
   //todo:
-  // 1. summariser is not sending anything, check the plot points structure. is gen text being added
-  // 2. close button does not close DONE
-  // 3. handle errors
-  // 4. change streaming for plot points to svelte way
+  // 1. handle bad request from api (error handling)
+  // 2. add loading spinner
+  // 3. add download button
+  
 
   import { onMount, afterUpdate } from "svelte";
 
@@ -43,12 +43,12 @@
   let domStory = [];
 
   function addStorySection() {
+    //add an empty string to the end of the story array
     domStory.push("");
   }
 
   function updateStory(str) {
     // get last element of story array
-    let lastElement = domStory[domStory.length - 1];
     // append the new string to the last element
     domStory[domStory.length - 1] = str;
   }
@@ -133,6 +133,9 @@
             if (index) {
               updatePlotPoint(result.text[0].trim(), index);
             } else {
+              if (!showStoryGen) {
+                done = true;
+              }
               updateStory(result.text[0].trim());
             }
           } catch (error) {
@@ -267,25 +270,32 @@ Resolution
       const pp = this.PLOT_POINTS_NUMBERING.map(([ppIdx, _]) => ppIdx);
       const ppTrueIndex = pp.indexOf(plotPointIdx);
       const prev = ppTrueIndex > 0;
-      const next = ppTrueIndex < pp.length - 1;
+      const final = (ppTrueIndex === pp.length - 1);
       let prevText = "";
+      let finalText = "";
 
       if (prev) {
         prevText =
           this.plotPoints[pp[ppTrueIndex - 1]]["summary"] ??
-          (await this.summarisePlotPoint(pp[ppTrueIndex - 1]));
-        prevText = "\nHere is the previous plot summary:\n" + prevText + "\n";
+          (await this.summariseStory(pp[ppTrueIndex - 1]));
+        prevText = "\nHere is a summary of the plot so far:\n" + prevText + "\n" + "Using the provided summary for the plot so far, write a narrative section for the current plot point to continue the plot.";
+      } else {
+        prevText = "Write a narrative section for the current plot point which will kick off the plot and establish the world.";
       }
 
-      let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.getPromptReadyGenre()}. ${prevText}
-Using the provided summary for the previous plot point and the overall plot summary, write a narrative section for the current plot point. Be creative, explore interesting characters and unusual settings. Do NOT use foreshadowing and ensure that the narrative section ONLY relates to the current prompt. Do not incorporate future plot points.
+      if (final) {
+        finalText = " This is the final plot point and should resolve the story in a satisfying way."
+      }
+
+
+      let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.getPromptReadyGenre()}. ${prevText} Be creative, explore interesting characters and unusual settings.${finalText}
 Here is the current plot prompt:
 ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
 
       return prompt;
     }
 
-    async summarisePlotPoint(plotPointIdx) {
+    async summariseStory(plotPointIdx) {
       const samplingParams = {
         max_tokens: 4096,
         temperature: 0.3,
@@ -294,10 +304,14 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
         min_p: 0.1,
       };
 
-      const text = this.plotPoints[plotPointIdx]["text"];
+      let text = this.plotPoints[plotPointIdx]["text"];
 
-      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to summarise the following narrative section into a few sentences. Here is the plot: ${text}[/INST]`;
+      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to update a summary of a story so far, please take the newest text passage and apply it's key facts to the summary so far. Try to keep the summary as breif as possible while retaining all the key facts. Here is the summary so far: ${this.overallPlotSummary} Here is the text: ${text}[/INST]`;
       let summary = "";
+
+      console.log("summarise prompt", prompt);
+
+
       try {
         const output = await callApi({
           prompt: prompt,
@@ -306,15 +320,15 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
         });
         summary = output;
       } catch (error) {
-        summary = this.plotPoints[plotPointIdx]["description"];
+        summary = this.overallPlotSummary;
       }
 
       this.plotPoints[plotPointIdx]["summary"] = summary;
+      this.overallPlotSummary = summary;
 
-      console.log(this.plotPoints);
       if (this.debug) {
         console.log(
-          `Summarised plot point ${plotPointIdx} as\n-----------------------------\n${summary}`,
+          `Summarised plot up to ${plotPointIdx} as\n-----------------------------\n${summary}`,
         );
       }
 
@@ -325,16 +339,8 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       return "Premise: " + this.premise;
     }
 
-    addLastStorySectionToPlotPoints(ind) {
-      this.plotPoints[ind]["text"] = domStory[domStory.length - 1];
-    }
-
     clearStory() {
-      for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
-        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["text"] = "";
-        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["summary"] = "";
-        this.plotPoints[this.PLOT_POINTS_NUMBERING[i][0]]["draft_prompt"] = "";
-      }
+      this.plotPoints = null;
     }
 
     async generatePlotPoints() {
@@ -387,7 +393,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       };
 
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
-        if (!toggleStoryGen) {
+        if (!showStoryGen) {
           break;
         }
 
@@ -412,7 +418,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 
         await callApi(payload).catch((error) => console.error(error));
 
-        this.addLastStorySectionToPlotPoints(plotPointIdx);
+        this.plotPoints[plotPointIdx]["text"] = domStory[i];
 
         if (this.debug) {
           console.log(`Generated plot point ${plotPointIdx}`);
@@ -453,7 +459,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
             <label for="genre">Genre: The genre of the story. </label><br />
             <select name="genre" id="genre">
               <option value="science_fiction"> Science Fiction </option>
-              <option value="love_stoires"> Love Stories </option>
+              <option value="love_stories"> Love Stories </option>
               <option value="ghost_stories"> Ghost Stories </option>
             </select>
           </p>
