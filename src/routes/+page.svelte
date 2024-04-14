@@ -202,7 +202,7 @@ Resolution
       this.genre = null;
       this.premise = null;
       this.plotPoints = null;
-      this.overallPlotSummary = null;
+      this.overallPlotSummary = "1.";
       this.debug = debug;
     }
 
@@ -306,7 +306,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
 
       let text = this.plotPoints[plotPointIdx]["text"];
 
-      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to update a summary of a story so far, please take the newest text passage and apply it's key facts to the summary so far. Try to keep the summary as breif as possible while retaining all the key facts. Here is the summary so far: ${this.overallPlotSummary} Here is the text: ${text}[/INST]`;
+      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to update a numbered list of key plot points taken place in the story so far. Please take the newest text passage and add the most important key points to the key plot points so far. Here are the key plot points so far: ${this.overallPlotSummary} Here is the text: ${text}[/INST]`;
       let summary = "";
 
       console.log("summarise prompt", prompt);
@@ -433,7 +433,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       .generatePlotPoints()
       .then(() => toggleStoryGen())
       .then(() => storyGenerator.generateStory())
-      .catch((error) => console.error(error));
+      .then(() => console.log(storyGenerator.plotPoints));
   }
   let storyGenerator = new StoryGenerator(true);
 </script>
