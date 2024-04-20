@@ -7,7 +7,6 @@
   // 1. handle bad request from api (error handling)
   // 2. add loading spinner
   // 3. add download button
-  
 
   import { onMount, afterUpdate } from "svelte";
 
@@ -69,6 +68,41 @@
       document.getElementById("story").classList.add("show");
       document.getElementById("story").classList.remove("hide");
     }
+  }
+
+  let focusedPlotPoint = null; // Initialize index as null
+
+  function focusPlotPoint() {
+    console.log(focusedPlotPoint);
+    const labels = document.querySelectorAll(".labels p");
+    const textareas = document.querySelectorAll(".group textarea");
+
+    labels.forEach((label, i) => {
+      if (i === focusedPlotPoint) {
+        console.log("focused", i);
+        label.classList.add("active");
+        console.log(label.classList);
+        textareas[i].focus(); // Focus the corresponding textarea
+      } else {
+        label.classList.remove("active");
+      }
+    });
+  }
+
+  function focus(fe) {
+    const index = parseInt(fe.target.id.split("_")[1]) - 1;
+    focusedPlotPoint = index;
+    focusPlotPoint();
+  }
+
+  function focusIndex(index) {
+    focusedPlotPoint = index;
+    focusPlotPoint();
+  }
+
+  function removeFocus() {
+    focusedPlotPoint = null;
+    focusPlotPoint();
   }
 
   function removeNonValidCharacters(inputString) {
@@ -266,31 +300,55 @@ Resolution
       return prompt;
     }
 
+    getPreviousSectionContext(plotPointIndex, contextCharacterLength) {
+      let text = this.plotPoints[plotPointIndex]["text"];
+
+      // split the text by new line
+      let textArray = text.split("\n");
+      let contextArray = [];
+
+      while (
+        contextArray.join("").length < contextCharacterLength &&
+        textArray.length > 0
+      ) {
+        contextArray.push(textArray.pop());
+      }
+
+      return contextArray.reverse().join("\n");
+    }
+
     async constructDraftPrompt(plotPointIdx) {
       const pp = this.PLOT_POINTS_NUMBERING.map(([ppIdx, _]) => ppIdx);
       const ppTrueIndex = pp.indexOf(plotPointIdx);
       const prev = ppTrueIndex > 0;
-      const final = (ppTrueIndex === pp.length - 1);
+      const final = ppTrueIndex === pp.length - 1;
       let prevText = "";
       let finalText = "";
+      let promptSeed = "";
 
       if (prev) {
         prevText =
           this.plotPoints[pp[ppTrueIndex - 1]]["summary"] ??
           (await this.summariseStory(pp[ppTrueIndex - 1]));
-        prevText = "\nHere is a summary of the plot so far:\n" + prevText + "\n" + "Using the provided summary for the plot so far, write a narrative section for the current plot point to continue the plot.";
+        prevText =
+          "\nHere is a summary of the plot so far:\n" +
+          prevText +
+          "\n" +
+          "Using the provided summary for the plot so far, write a narrative section for the current plot point to continue the plot.";
+        promptSeed = this.getPreviousSectionContext(pp[ppTrueIndex - 1], 200);
       } else {
-        prevText = "Write a narrative section for the current plot point which will kick off the plot and establish the world.";
+        prevText =
+          "Write a narrative section for the current plot point which will kick off the plot and establish the world.";
       }
 
       if (final) {
-        finalText = " This is the final plot point and should resolve the story in a satisfying way."
+        finalText =
+          " This is the final plot point and should resolve the story in a satisfying way.";
       }
-
 
       let prompt = `[INST] You are a renowned creative writer specialising in the genre of ${this.getPromptReadyGenre()}. ${prevText} Be creative, explore interesting characters and unusual settings.${finalText}
 Here is the current plot prompt:
-${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
+${this.plotPoints[plotPointIdx]["description"]}[/INST]${promptSeed}`;
 
       return prompt;
     }
@@ -310,7 +368,6 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       let summary = "";
 
       console.log("summarise prompt", prompt);
-
 
       try {
         const output = await callApi({
@@ -355,6 +412,9 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]`;
       };
 
       for (let i = 0; i < this.PLOT_POINTS_AMT; i++) {
+        //text area focus
+        focusIndex(i);
+
         const plotPointIdx = this.PLOT_POINTS_NUMBERING[i][0];
         const plotPointDesc = this.PLOT_POINTS_NUMBERING[i][1];
         console.log(plotPointIdx, this.plotPoints);
@@ -376,6 +436,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 
         await callApi(payload).catch((error) => console.error(error));
         this.extractFromForm();
+        removeFocus();
       }
 
       if (this.debug) {
@@ -442,154 +503,167 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   <title>StoryGen</title>
 </head>
 <body>
-  <h1>Story Structure Input</h1>
   <div class="container">
     <form on:submit={generateStoryButton} on:reset={resetForm}>
+    <!-- Setup -->
+    <div class="box">
+      <div class="labels">
+        <p id="label_1">
+          <b>Exposition</b><br />The status quo or ‘ordinary world’ is
+          established.
+        </p>
+        <p id="label_2">
+          <b>Inciting Incident</b><br />An event that sets the story in motion.
+        </p>
+        <p id="label_3">
+          <b>Plot Point A</b><br />The protagonist decides to tackle the
+          challenge head-on. They ‘cross the threshold,’ and the story is now
+          truly moving.
+        </p>
+      </div>
+      <div class="group">
+        <textarea
+          id="input_1"
+          name="input_1"
+          bind:value={domPlotPoints["1"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_2"
+          name="input_2"
+          bind:value={domPlotPoints["2"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_3"
+          name="input_3"
+          bind:value={domPlotPoints["3"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Confrontation -->
+    <div class="box">
+      <div class="labels">
+        <p id="label_4">
+          <b>Rising Action</b><br />The story's true stakes become clear; our
+          hero grows familiar with their ‘new world’ and has their first
+          encounters with some enemies and allies.
+        </p>
+        <p id="label_5">
+          <b>Midpoint</b><br />An event that upends the protagonist’s mission.
+        </p>
+        <p id="label_6">
+          <b>Plot Point B</b><br />In the wake of the disorienting midpoint, the
+          protagonist is tested — and fails. Their ability to succeed is now in
+          doubt.
+        </p>
+      </div>
+      <div class="group">
+        <textarea
+          id="input_4"
+          name="input_4"
+          bind:value={domPlotPoints["4"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_5"
+          name="input_5"
+          bind:value={domPlotPoints["5"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_6"
+          name="input_6"
+          bind:value={domPlotPoints["6"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Resolution -->
+    <div class="box">
+      <div class="labels">
+        <p id="label_7">
+          <b>Pre Climax</b><br />Night is darkest before dawn. The protagonist
+          must pull themselves together and choose between decisive action and
+          failure.
+        </p>
+        <p id="label_8">
+          <b>Climax</b><br />They face off against their antagonist one last
+          time. Will they prevail?
+        </p>
+        <p id="label_9">
+          <b>Denouement</b><br />All loose ends are tied up. The reader
+          discovers the consequences of the climax. A new status quo is
+          established.
+        </p>
+      </div>
+      <div class="group">
+        <textarea
+          id="input_7"
+          name="input_7"
+          bind:value={domPlotPoints["7"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_8"
+          name="input_8"
+          bind:value={domPlotPoints["8"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+
+        <textarea
+          id="input_9"
+          name="input_9"
+          bind:value={domPlotPoints["9"]}
+          on:focus={focus}
+          on:blur={removeFocus}
+        ></textarea>
+      </div>
+    </div>
+
+    
       <!-- Premise -->
-      <div class="box">
-        <h2>Premise</h2>
-        <div class="group">
+      <div class="box" id="bottom">
+
           <p>
             <label for="premise"
-              >Premise: A brief summary of the story.
-            </label><br />
-            <textarea id="premise" name="premise"></textarea><br />
+              >Story Premise
+            </label>
+            <textarea id="premise" name="premise"></textarea>
           </p>
           <p>
-            <label for="genre">Genre: The genre of the story. </label><br />
+            <label for="genre">Genre</label>
             <select name="genre" id="genre">
               <option value="science_fiction"> Science Fiction </option>
               <option value="love_stories"> Love Stories </option>
               <option value="ghost_stories"> Ghost Stories </option>
             </select>
           </p>
+          <div>
+          <button type="submit">Generate Story!</button>
+          <button type="reset">Reset</button>
         </div>
+        <div id="loading_spinner" class="hide"></div>
+
       </div>
 
-      <!-- Setup -->
-      <div class="box">
-        <h2>Setup</h2>
-        <div class="group">
-          <p>
-            <label for="exposition"
-              >1.1 Exposition: The status quo or ‘ordinary world’ is
-              established.</label
-            ><br />
-            <textarea
-              id="input_1"
-              name="input_1"
-              bind:value={domPlotPoints["1"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="incitingIncident"
-              >1.2 Inciting Incident: An event that sets the story in motion.</label
-            ><br />
-            <textarea
-              id="input_2"
-              name="input_2"
-              bind:value={domPlotPoints["2"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="plotPointA"
-              >1.3 Plot Point A: The protagonist decides to tackle the challenge
-              head-on. They ‘cross the threshold,’ and the story is now truly
-              moving.</label
-            ><br />
-            <textarea
-              id="input_3"
-              name="input_3"
-              bind:value={domPlotPoints["3"]}
-            ></textarea><br />
-          </p>
-        </div>
-      </div>
-
-      <!-- Confrontation -->
-      <div class="box">
-        <h2>Confrontation</h2>
-        <div class="group">
-          <p>
-            <label for="risingAction"
-              >2.1 Rising Action: The story's true stakes become clear; our hero
-              grows familiar with their ‘new world’ and has their first
-              encounters with some enemies and allies.</label
-            ><br />
-            <textarea
-              id="input_4"
-              name="input_4"
-              bind:value={domPlotPoints["4"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="midpoint"
-              >2.2 Midpoint: An event that upends the protagonist’s mission.</label
-            ><br />
-            <textarea
-              id="input_5"
-              name="input_5"
-              bind:value={domPlotPoints["5"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="plotPointB"
-              >2.3 Plot Point B: In the wake of the disorienting midpoint, the
-              protagonist is tested — and fails. Their ability to succeed is now
-              in doubt.</label
-            ><br />
-            <textarea
-              id="input_6"
-              name="input_6"
-              bind:value={domPlotPoints["6"]}
-            ></textarea><br />
-          </p>
-        </div>
-      </div>
-
-      <!-- Resolution -->
-      <div class="box">
-        <h2>Resolution</h2>
-        <div class="group">
-          <p>
-            <label for="preClimax"
-              >3.1 Pre Climax: The night is darkest before dawn. The protagonist
-              must pull themselves together and choose between decisive action
-              and failure.</label
-            ><br />
-            <textarea
-              id="input_7"
-              name="input_7"
-              bind:value={domPlotPoints["7"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="climax"
-              >3.2 Climax: They face off against their antagonist one last time.
-              Will they prevail?</label
-            ><br />
-            <textarea
-              id="input_8"
-              name="input_8"
-              bind:value={domPlotPoints["8"]}
-            ></textarea><br />
-          </p>
-          <p>
-            <label for="denouement"
-              >3.3 Denouement: All loose ends are tied up. The reader discovers
-              the consequences of the climax. A new status quo is established.</label
-            ><br />
-            <textarea
-              id="input_9"
-              name="input_9"
-              bind:value={domPlotPoints["9"]}
-            ></textarea><br />
-          </p>
-        </div>
-      </div>
-
-      <button type="submit">Generate Story!</button>
-      <button type="reset">Reset</button>
+     
     </form>
     <div id="story" class="hide">
       <div id="buttonContainer">
@@ -615,36 +689,58 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   }
 
   .container {
-    max-width: 75%;
+    max-width: 85%;
     margin: 0 auto;
     padding: 20px;
   }
 
-  .group {
+  :global(.active) {
+    border: 2px solid #1e236d !important;
+    }
+
+  .labels {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
   }
 
-  .group p {
-    width: calc(33.33% - 10px);
-    margin-bottom: 40px;
-    position: relative;
+  .labels p {
+    flex: 1;
+    border-radius: 10px;
+    padding: 10px;
+    padding-bottom: 10px;
+    border: 2px solid #bd213100;
+  }
+
+  .group {
+    display: flex;
   }
 
   textarea {
-    width: 100%;
-    resize: vertical;
+    flex: 1;
+    min-width: 100px;
+    resize: none; /* Disable resizing via drag */
     min-height: 100px;
     padding: 10px;
     box-sizing: border-box;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
-    position: relative;
+    transition: all 0.3s ease; /* Add transition for smooth size changes */
   }
 
-  /* Adjust the button alignment */
+  /* Increase size when focused */
+  textarea:focus {
+    flex: 2;
+    min-width: 200px;
+  }
+
+  textarea:not(:focus) {
+    flex: 1;
+  }
+
+  textarea + textarea {
+    margin-left: 10px;
+  }
+
   button {
     background-color: #007bff;
     color: white;
@@ -657,11 +753,6 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     display: block;
     margin-left: auto;
     margin-right: auto;
-  }
-
-  /* Adjust the heading margin */
-  h2 {
-    margin-top: 0;
   }
 
   button:hover {
@@ -687,8 +778,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     background-color: white;
     border: 2px solid black;
     padding: 20px;
-    overflow-y: auto; /* Enable vertical scrollbar if content exceeds the height */
-    z-index: 9999; /* Ensure the div appears on top of other content */
+    overflow-y: auto;
+    z-index: 9999;
   }
 
   #scrollDiv {
@@ -700,7 +791,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   #story p {
     white-space: pre-line;
   }
-  /* button container fixed top right of parent */
+
   #buttonContainer {
     position: absolute;
     top: 0;
@@ -713,5 +804,33 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 
   .hide {
     display: none;
+  }
+
+  #bottom {
+    /* keep stuck to the bottom of the screen */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-evenly;
+    width: 85%;
+    min-height: 150px;
+    height:10%;
+
+  }
+
+  #loading_spinner {
+    display: none;
+    width: 100px;
+    height: 100px;
+    background-color: #333;
+    border-radius: 50%;
+    border: 16px solid #f3f3f3;
+    border-top: 16px solid #3498db;
+    width: 120px;
+    height: 120px;
+    -webkit-animation: spin 2s linear infinite;
+    animation: spin 2s linear infinite;
   }
 </style>
