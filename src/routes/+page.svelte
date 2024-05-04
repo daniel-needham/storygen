@@ -1,7 +1,8 @@
 <script lang="ts">
   // @ts-nocheck
-
   import { base } from "$app/paths";
+  import DownloadButton from "./DownloadButton.svelte";
+  import LoadingSpinner from "./LoadingSpinner.svelte";
 
   //todo:
   // 1. handle bad request from api (error handling)
@@ -26,6 +27,7 @@
     }
   }
 
+  let plotPointsLoading = false;
   let domPlotPoints = {
     "1": "",
     "2": "",
@@ -40,6 +42,11 @@
 
   let showStoryGen = false;
   let domStory = [];
+  let downloadableStory = "";
+
+  function togglePlotPointsLoading() {
+    plotPointsLoading = !plotPointsLoading;
+  }
 
   function addStorySection() {
     //add an empty string to the end of the story array
@@ -60,6 +67,7 @@
     if (showStoryGen) {
       showStoryGen = false;
       domStory = [];
+      downloadableStory = "";
       storyGenerator.clearStory();
       document.getElementById("story").classList.add("hide");
       document.getElementById("story").classList.remove("show");
@@ -119,6 +127,11 @@
     for (let i = 1; i <= 9; i++) {
       document.getElementById(`input_${i}`).value = "";
     }
+    storyGenerator.clearStory();
+  }
+
+  function updateDownloadableStory() {
+    downloadableStory = domStory.join("\n");
   }
 
   async function callApi(payload) {
@@ -402,6 +415,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]${promptSeed}`;
     }
 
     async generatePlotPoints() {
+      togglePlotPointsLoading();
       this.extractFromForm();
       const samplingParams = {
         max_tokens: 4096,
@@ -443,6 +457,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       if (this.debug) {
         console.log(`Generated plot points: ${this.plotPointsToPrompt()}`);
       }
+
+      togglePlotPointsLoading();
     }
 
     async generateStory() {
@@ -495,7 +511,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       .generatePlotPoints()
       .then(() => toggleStoryGen())
       .then(() => storyGenerator.generateStory())
-      .then(() => console.log(storyGenerator.plotPoints));
+      .then(() => console.log(storyGenerator.plotPoints))
+      .then(() => updateDownloadableStory());
   }
   let storyGenerator = new StoryGenerator(true);
 </script>
@@ -506,171 +523,182 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 <body>
   <div class="container">
     <form on:submit={generateStoryButton} on:reset={resetForm}>
-    <!-- Setup -->
-    <div class="box">
-      <div class="labels">
-        <p id="label_1">
-          <b>Exposition</b><br />The status quo or ‘ordinary world’ is
-          established.
-        </p>
-        <p id="label_2">
-          <b>Inciting Incident</b><br />An event that sets the story in motion.
-        </p>
-        <p id="label_3">
-          <b>Plot Point A</b><br />The protagonist decides to tackle the
-          challenge head-on. They ‘cross the threshold,’ and the story is now
-          truly moving.
-        </p>
+      <!-- Setup -->
+      <div class="box">
+        <div class="labels">
+          <p id="label_1">
+            <b>Exposition</b><br />The status quo or ‘ordinary world’ is
+            established.
+          </p>
+          <p id="label_2">
+            <b>Inciting Incident</b><br />An event that sets the story in
+            motion.
+          </p>
+          <p id="label_3">
+            <b>Plot Point A</b><br />The protagonist decides to tackle the
+            challenge head-on. They ‘cross the threshold,’ and the story is now
+            truly moving.
+          </p>
+        </div>
+        <div class="group">
+          <textarea
+            id="input_1"
+            name="input_1"
+            bind:value={domPlotPoints["1"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+
+          <textarea
+            id="input_2"
+            name="input_2"
+            bind:value={domPlotPoints["2"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+
+          <textarea
+            id="input_3"
+            name="input_3"
+            bind:value={domPlotPoints["3"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+        </div>
       </div>
-      <div class="group">
-        <textarea
-          id="input_1"
-          name="input_1"
-          bind:value={domPlotPoints["1"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
 
-        <textarea
-          id="input_2"
-          name="input_2"
-          bind:value={domPlotPoints["2"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
+      <!-- Confrontation -->
+      <div class="box">
+        <div class="labels">
+          <p id="label_4">
+            <b>Rising Action</b><br />The story's true stakes become clear; our
+            hero grows familiar with their ‘new world’ and has their first
+            encounters with some enemies and allies.
+          </p>
+          <p id="label_5">
+            <b>Midpoint</b><br />An event that upends the protagonist’s mission.
+          </p>
+          <p id="label_6">
+            <b>Plot Point B</b><br />In the wake of the disorienting midpoint,
+            the protagonist is tested — and fails. Their ability to succeed is
+            now in doubt.
+          </p>
+        </div>
+        <div class="group">
+          <textarea
+            id="input_4"
+            name="input_4"
+            bind:value={domPlotPoints["4"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
 
-        <textarea
-          id="input_3"
-          name="input_3"
-          bind:value={domPlotPoints["3"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
+          <textarea
+            id="input_5"
+            name="input_5"
+            bind:value={domPlotPoints["5"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+
+          <textarea
+            id="input_6"
+            name="input_6"
+            bind:value={domPlotPoints["6"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+        </div>
       </div>
-    </div>
 
-    <!-- Confrontation -->
-    <div class="box">
-      <div class="labels">
-        <p id="label_4">
-          <b>Rising Action</b><br />The story's true stakes become clear; our
-          hero grows familiar with their ‘new world’ and has their first
-          encounters with some enemies and allies.
-        </p>
-        <p id="label_5">
-          <b>Midpoint</b><br />An event that upends the protagonist’s mission.
-        </p>
-        <p id="label_6">
-          <b>Plot Point B</b><br />In the wake of the disorienting midpoint, the
-          protagonist is tested — and fails. Their ability to succeed is now in
-          doubt.
-        </p>
+      <!-- Resolution -->
+      <div class="box">
+        <div class="labels">
+          <p id="label_7">
+            <b>Pre Climax</b><br />Night is darkest before dawn. The protagonist
+            must pull themselves together and choose between decisive action and
+            failure.
+          </p>
+          <p id="label_8">
+            <b>Climax</b><br />They face off against their antagonist one last
+            time. Will they prevail?
+          </p>
+          <p id="label_9">
+            <b>Denouement</b><br />All loose ends are tied up. The reader
+            discovers the consequences of the climax. A new status quo is
+            established.
+          </p>
+        </div>
+        <div class="group">
+          <textarea
+            id="input_7"
+            name="input_7"
+            bind:value={domPlotPoints["7"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+
+          <textarea
+            id="input_8"
+            name="input_8"
+            bind:value={domPlotPoints["8"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+
+          <textarea
+            id="input_9"
+            name="input_9"
+            bind:value={domPlotPoints["9"]}
+            on:focus={focus}
+            on:blur={removeFocus}
+          ></textarea>
+        </div>
       </div>
-      <div class="group">
-        <textarea
-          id="input_4"
-          name="input_4"
-          bind:value={domPlotPoints["4"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
 
-        <textarea
-          id="input_5"
-          name="input_5"
-          bind:value={domPlotPoints["5"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
-
-        <textarea
-          id="input_6"
-          name="input_6"
-          bind:value={domPlotPoints["6"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
-      </div>
-    </div>
-
-    <!-- Resolution -->
-    <div class="box">
-      <div class="labels">
-        <p id="label_7">
-          <b>Pre Climax</b><br />Night is darkest before dawn. The protagonist
-          must pull themselves together and choose between decisive action and
-          failure.
-        </p>
-        <p id="label_8">
-          <b>Climax</b><br />They face off against their antagonist one last
-          time. Will they prevail?
-        </p>
-        <p id="label_9">
-          <b>Denouement</b><br />All loose ends are tied up. The reader
-          discovers the consequences of the climax. A new status quo is
-          established.
-        </p>
-      </div>
-      <div class="group">
-        <textarea
-          id="input_7"
-          name="input_7"
-          bind:value={domPlotPoints["7"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
-
-        <textarea
-          id="input_8"
-          name="input_8"
-          bind:value={domPlotPoints["8"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
-
-        <textarea
-          id="input_9"
-          name="input_9"
-          bind:value={domPlotPoints["9"]}
-          on:focus={focus}
-          on:blur={removeFocus}
-        ></textarea>
-      </div>
-    </div>
-
-    
       <!-- Premise -->
       <div class="box" id="bottom">
-
-          <p>
-            <label for="premise"
-              >Story Premise
-            </label>
-            <textarea id="premise" name="premise"></textarea>
-          </p>
-          <p>
-            <label for="genre">Genre</label>
-            <select name="genre" id="genre">
-              <option value="science_fiction"> Science Fiction </option>
-              <option value="love_stories"> Love Stories </option>
-              <option value="ghost_stories"> Ghost Stories </option>
-            </select>
-          </p>
-          <div>
+        <div id="premiseBox">
+          <label for="premise">Story Premise </label>
+          <textarea id="premise" name="premise"></textarea>
+        </div>
+        <div id="genreBox">
+          <label for="genre">Genre</label>
+          <select name="genre" id="genre">
+            <option value="science_fiction"> Science Fiction </option>
+            <option value="love_stories"> Love Stories </option>
+            <option value="ghost_stories"> Ghost Stories </option>
+          </select>
+        </div>
+        <div>
           <button type="submit">Generate Story!</button>
           <button type="reset">Reset</button>
         </div>
-        <div id="loading_spinner" class="hide"></div>
-
+        <div id="loadingSpinnerContainer">
+        {#if plotPointsLoading}
+          <LoadingSpinner />
+        {:else}
+          <div></div>
+        {/if}
       </div>
-
-     
     </form>
     <div id="story" class="hide">
       <div id="buttonContainer">
-        <button type="button" id="close" on:click={toggleStoryGen}>Close</button
+        <button type="button" id="close" on:click={toggleStoryGen}>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+          >
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path
+              d="M6.71 6.71L12 12l5.29-5.29a1 1 0 0 1 1.41 1.41L13.41 12l5.29 5.29a1 1 0 0 1-1.41 1.41L12 13.41l-5.29 5.29a1 1 0 0 1-1.41-1.41L10.59 12 5.3 6.71A1 1 0 0 1 6.71 5.3z"
+            />
+          </svg></button
         >
-        <button type="button" id="download">Download</button>
+        <!-- domStory concatenated download -->
+        <DownloadButton textContent={downloadableStory} />
       </div>
       <div bind:this={scrollDiv} id="scrollDiv">
         {#each domStory as section}
@@ -697,7 +725,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 
   :global(.active) {
     border: 2px solid #1e236d !important;
-    }
+  }
 
   .labels {
     display: flex;
@@ -817,21 +845,28 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     justify-content: space-evenly;
     width: 85%;
     min-height: 150px;
-    height:10%;
-
+    height: 10%;
   }
 
-  #loading_spinner {
-    display: none;
-    width: 100px;
-    height: 100px;
-    background-color: #333;
-    border-radius: 50%;
-    border: 16px solid #f3f3f3;
-    border-top: 16px solid #3498db;
-    width: 120px;
-    height: 120px;
-    -webkit-animation: spin 2s linear infinite;
-    animation: spin 2s linear infinite;
+  #premiseBox {
+    padding: 20px;
+    flex: 2.5;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #genreBox {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #loadingSpinnerContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 100%;
   }
 </style>
