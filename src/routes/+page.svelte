@@ -364,7 +364,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]${promptSeed}`;
 
       let text = this.plotPoints[plotPointIdx]["text"];
 
-      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to update a numbered list of key plot points taken place in the story so far. Please take the newest text passage and add the most important key points to the key plot points so far. Here are the key plot points so far: ${this.overallPlotSummary} Here is the text: ${text}[/INST]`;
+      let prompt = `[INST]You are a helpful assistant to a writer. You have been asked to update an extremely concise story summary. Please take the newest text passage and add the most important key points to summary so far. Keep it brief! Here is the summary so far: ${this.overallPlotSummary} Here is the text: ${text}[/INST]`;
       let summary = "";
 
       console.log("summarise prompt", prompt);
@@ -398,6 +398,7 @@ ${this.plotPoints[plotPointIdx]["description"]}[/INST]${promptSeed}`;
 
     clearStory() {
       this.plotPoints = null;
+      this.overallPlotSummary = "1.";
     }
 
     async generatePlotPoints() {
