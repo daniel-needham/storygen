@@ -158,11 +158,13 @@
   async function callApi(payload) {
     // Define the API endpoint
     const apiEndpoint = "https://as6xb.apps.beam.cloud/generate";
+    const API_KEY = import.meta.env.VITE_BEAM_API_KEY 
+    console.log(API_KEY)
 
     // Define the authorization token
     const headers = {
       Authorization:
-        "Basic NzAyMmQyOTRkMjhiZjc2MmQzOGE0YzU2ODNkY2UzMjI6OThhM2E5NDFmMGNmZGU2NWM5MjMyOWExYWZkZjZmNjI=",
+        API_KEY,
       "Content-Type": "application/json",
       // Add any other headers if required
     };
@@ -535,7 +537,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       .then(() => console.log(storyGenerator.plotPoints))
       .then(() => updateDownloadableStory());
   }
-  let storyGenerator = new StoryGenerator(true);
+  let storyGenerator = new StoryGenerator(false);
 </script>
 
 <head>
