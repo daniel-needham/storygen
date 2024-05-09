@@ -44,6 +44,27 @@
   let domStory = [];
   let downloadableStory = "";
 
+  function downloadTextFile() {
+    if (downloadableStory.trim() !== "") {
+      const element = document.createElement("a");
+      const file = new Blob([downloadableStory], { type: "text/plain" });
+
+      element.href = URL.createObjectURL(file);
+      element.download = "downloaded-text.txt";
+
+      // Accessibility attributes for screen readers
+      element.setAttribute("aria-hidden", "true");
+      element.style.display = "none";
+
+      document.body.appendChild(element);
+      element.click();
+
+      // Clean up
+      document.body.removeChild(element);
+      URL.revokeObjectURL(element.href); // Revoke the object URL
+    }
+  }
+
   function togglePlotPointsLoading() {
     plotPointsLoading = !plotPointsLoading;
   }
@@ -123,11 +144,11 @@
 
   function resetForm(event) {
     event.preventDefault();
-    document.getElementById("premise").value = "";
-    for (let i = 1; i <= 9; i++) {
-      document.getElementById(`input_${i}`).value = "";
-    }
     storyGenerator.clearStory();
+    document.getElementById("premise").value = "";
+    for(let i = 1; i <= 9; i++) {
+      updatePlotPoint("", i);
+    }
   }
 
   function updateDownloadableStory() {
@@ -518,13 +539,21 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 </script>
 
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StoryGen</title>
+  <style>
+    html {
+      background-color: #374259; /* Change this to the color you want */
+      scrollbar-color: #5c8984 #192235;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
     <form on:submit={generateStoryButton} on:reset={resetForm}>
       <!-- Setup -->
-      <div class="box">
+      <div class="box" id="topBox">
         <div class="labels">
           <p id="label_1">
             <b>Exposition</b><br />The status quo or ‘ordinary world’ is
@@ -566,9 +595,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
           ></textarea>
         </div>
       </div>
-
       <!-- Confrontation -->
-      <div class="box">
+      <div class="box" id="middleBox">
         <div class="labels">
           <p id="label_4">
             <b>Rising Action</b><br />The story's true stakes become clear; our
@@ -610,9 +638,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
           ></textarea>
         </div>
       </div>
-
       <!-- Resolution -->
-      <div class="box">
+      <div class="box" id="bottomBox">
         <div class="labels">
           <p id="label_7">
             <b>Pre Climax</b><br />Night is darkest before dawn. The protagonist
@@ -659,46 +686,74 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
       <!-- Premise -->
       <div class="box" id="bottom">
         <div id="premiseBox">
-          <label for="premise">Story Premise </label>
+          <label for="premise">Enter your story premise here:</label>
           <textarea id="premise" name="premise"></textarea>
         </div>
         <div id="genreBox">
           <label for="genre">Genre</label>
           <select name="genre" id="genre">
             <option value="science_fiction"> Science Fiction </option>
-            <option value="love_stories"> Love Stories </option>
             <option value="ghost_stories"> Ghost Stories </option>
           </select>
         </div>
-        <div>
+        <div id="buttonBox">
           <button type="submit">Generate Story!</button>
           <button type="reset">Reset</button>
         </div>
         <div id="loadingSpinnerContainer">
-        {#if plotPointsLoading}
-          <LoadingSpinner />
-        {:else}
-          <div></div>
-        {/if}
+          {#if plotPointsLoading}
+            <LoadingSpinner />
+          {:else}
+            <div style="width: 50px;"></div>
+          {/if}
+        </div>
       </div>
     </form>
     <div id="story" class="hide">
       <div id="buttonContainer">
-        <button type="button" id="close" on:click={toggleStoryGen}>
+        <button
+          type="button"
+          id="download"
+          on:click={downloadTextFile}
+          aria-label="Download Text"
+        >
           <svg
+            class="w-6 h-6 text-gray-800 dark:text-white"
+            aria-hidden="true"
             xmlns="http://www.w3.org/2000/svg"
             width="24"
             height="24"
+            fill="none"
             viewBox="0 0 24 24"
           >
-            <path d="M0 0h24v24H0z" fill="none" />
             <path
-              d="M6.71 6.71L12 12l5.29-5.29a1 1 0 0 1 1.41 1.41L13.41 12l5.29 5.29a1 1 0 0 1-1.41 1.41L12 13.41l-5.29 5.29a1 1 0 0 1-1.41-1.41L10.59 12 5.3 6.71A1 1 0 0 1 6.71 5.3z"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 13V4M7 14H5a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1h-2m-1-5-4 5-4-5m9 8h.01"
             />
-          </svg></button
-        >
-        <!-- domStory concatenated download -->
-        <DownloadButton textContent={downloadableStory} />
+          </svg>
+        </button>
+        <button type="button" id="close" on:click={toggleStoryGen}>
+          <svg
+            class="w-6 h-6 text-gray-800 dark:text-white"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="m15 9-6 6m0-6 6 6m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            />
+          </svg>
+        </button>
       </div>
       <div bind:this={scrollDiv} id="scrollDiv">
         {#each domStory as section}
@@ -710,21 +765,58 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 </body>
 
 <style>
+
   body {
     font-family: Arial, sans-serif;
+    color: #f2d8d8;
     line-height: 1.6;
     margin: 0;
     padding: 0;
+    height: 70%;
+    width: 100vw;
+    background-color: #374259;
+    
+  }
+
+  hr {
+    border: 0;
+    border-top: 4px solid #5c8984;
+    margin-top: 20px;
   }
 
   .container {
     max-width: 85%;
     margin: 0 auto;
-    padding: 20px;
+  }
+
+  #topBox {
+    background-image: linear-gradient(
+      to top,
+      #192235,
+      #202a3e,
+      #283247,
+      #2f3a50,
+      #374259
+    );
+  }
+
+  #middleBox {
+    background-color: #192235;
+  }
+
+  #bottomBox {
+    background-image: linear-gradient(
+      to bottom,
+      #192235,
+      #202a3e,
+      #283247,
+      #2f3a50,
+      #374259
+    );
   }
 
   :global(.active) {
-    border: 2px solid #1e236d !important;
+    border: 2px solid #5c8984 !important;
   }
 
   .labels {
@@ -734,9 +826,8 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   .labels p {
     flex: 1;
     border-radius: 10px;
-    padding: 10px;
-    padding-bottom: 10px;
-    border: 2px solid #bd213100;
+    padding: 5px;
+    border: 2px solid #fffcfc00;
   }
 
   .group {
@@ -745,21 +836,25 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
 
   textarea {
     flex: 1;
+    background-color: #374259;
+    color: #f2d8d8;
     min-width: 100px;
     resize: none; /* Disable resizing via drag */
     min-height: 100px;
     padding: 10px;
     box-sizing: border-box;
-    border: 1px solid #ccc;
+    border: 2px solid #5c8984;
     border-radius: 4px;
     font-size: 16px;
     transition: all 0.3s ease; /* Add transition for smooth size changes */
+    scrollbar-color: #5c8984 #192235;
   }
 
   /* Increase size when focused */
   textarea:focus {
     flex: 2;
     min-width: 200px;
+    border: 2px solid #5c8984;
   }
 
   textarea:not(:focus) {
@@ -771,7 +866,7 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   }
 
   button {
-    background-color: #007bff;
+    background-color: #1a4675;
     color: white;
     font-size: 16px;
     padding: 10px 20px;
@@ -785,11 +880,11 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
   }
 
   button:hover {
-    background-color: #0056b3;
+    background-color: #2263a8;
   }
 
   button[type="reset"] {
-    background-color: #dc3545;
+    background-color: #5c181e;
     margin-right: 10px;
   }
 
@@ -804,11 +899,14 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     transform: translate(-50%, -50%);
     width: 80%;
     height: 80%;
-    background-color: white;
+    background-color: #192235;
     border: 2px solid black;
     padding: 20px;
+    padding-top: 50px;
     overflow-y: auto;
     z-index: 9999;
+    color: #f2d8d8;
+    scrollbar-color: #5c8984 #192235;
   }
 
   #scrollDiv {
@@ -825,7 +923,29 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     position: absolute;
     top: 0;
     right: 0;
+    display: flex;
+    padding: 0px;
   }
+
+  #close {
+    background-color: #5c181e;
+    margin-top: 0px;
+  }
+
+  #close:hover {
+    background-color: #bd2130;
+  }
+
+  #download {
+    background-color: #1a4675;
+    margin-top: 0px;
+  }
+
+  #download:hover {
+    background-color: #2263a8;
+  }
+
+
 
   .show {
     display: block;
@@ -843,16 +963,22 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     right: 0;
     display: flex;
     justify-content: space-evenly;
-    width: 85%;
-    min-height: 150px;
-    height: 10%;
+    width: 100%;
+    min-height: 100px;
+    height: 20vh;
+    background-color: #192235;
   }
 
   #premiseBox {
     padding: 20px;
-    flex: 2.5;
+    flex: 3;
     display: flex;
     flex-direction: column;
+  }
+
+  #premiseBox label {
+    margin-bottom: 10px;
+    font-size: larger;
   }
 
   #genreBox {
@@ -866,7 +992,48 @@ ${this.structureTemplate}${this.getPromptReadyPremise()}${currentPlotPrompt}\nCr
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 40px;
+    width: 50x;
     height: 100%;
+    padding: 20px;
+  }
+
+  #genreBox {
+    margin-bottom: 20px; /* Add space below the genre box */
+
+    color: #f2d8d8;
+    content: flex;
+    flex-direction: column;
+    align-items: left;
+    width: fit-content;
+  }
+
+  /* Styling for the label */
+  label {
+    margin-bottom: 10px;
+    font-size: larger;
+  }
+
+  /* Styling for the select dropdown */
+  select {
+    width: 200px; /* Set width of the dropdown */
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #374259;
+    color: #f2d8d8;
+  }
+
+  /* Styling for the options in the dropdown */
+  option {
+    font-size: 14px;
+    background-color: #374259;
+  }
+
+  #buttonBox {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
   }
 </style>
